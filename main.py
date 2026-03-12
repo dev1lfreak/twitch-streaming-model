@@ -1,46 +1,27 @@
-import random, heapq
-from blocks.streamer import Streamer
-from blocks.network import NetworkChannel
-from blocks.player import Player
-from model.statistics_collector import StatisticsCollector
+from model.simulator import Simulation
+from data.analyze import SimulationAnalyzer
 
-def run_simulation(duration=20):
-    stats = StatisticsCollector()
-    streamer = Streamer()
-    net = NetworkChannel(bandwidth=4000000, loss_rate=0.005)
-    player = Player(start_threshold=2.0)
-    
-    events = [] # (time, action, data)
-    heapq.heappush(events, (0, "gen_v", None))
-    heapq.heappush(events, (0, "gen_a", None))
-    heapq.heappush(events, (0, "tick", None))
-    
-    stats.log_stall_start(0) # Стартовая буферизация
+config = {
+    'video_bitrate': 4500, # kbps
+    'fps': 60,
+    'gop_size': 120,      # 2 секунды при 60 fps
+    'audio_bitrate': 160,
+    'bandwidth': 5000,    # kbps
+    'network_delay': 0.05, # 50ms
+    'jitter_intensity': 0.01,
+    'packet_loss_probability': 0.005,
+    'initial_buffer_duration': 2.0,
+    'av_sync_threshold': 40, # ms
+    'random_seed': 42
+}
 
-    while events:
-        t, action, data = heapq.heappop(events)
-        if t > duration: break
+if __name__ == "__main__":
+    analyzer = SimulationAnalyzer()
+    for _ in range(500):
+        print(f"Запуск симуляции {_+1}")
+        sim = Simulation(config)
+        sim.run(5000)
+        analyzer.save_run(sim.stats)
+    analyzer.analyze()      
 
-        if action == "gen_v":
-            frame = streamer.get_frame(t)
-            arrival = net.process(frame, t, stats)
-            if arrival: heapq.heappush(events, (arrival, "recv", frame))
-            heapq.heappush(events, (t + 1/60, "gen_v", None))
 
-        elif action == "gen_a":
-            frame = streamer.get_audio(t)
-            arrival = net.process(frame, t, stats)
-            if arrival: heapq.heappush(events, (arrival, "recv", frame))
-            heapq.heappush(events, (t + 0.02, "gen_a", None))
-
-        elif action == "recv":
-            if data["type"] == "v": player.buf_v.append(data["pts"])
-            else: player.buf_a.append(data["pts"])
-
-        elif action == "tick":
-            player.update(t, 0.01, stats)
-            heapq.heappush(events, (t + 0.01, "tick", None))
-
-    stats.report()
-
-run_simulation(20000)
