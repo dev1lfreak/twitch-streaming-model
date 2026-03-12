@@ -1,30 +1,55 @@
 class Player:
-    def __init__(self, start_threshold=2.0):
-        self.threshold = start_threshold
-        self.buf_v = []
-        self.buf_a = []
-        self.playing = False
+    def __init__(self, config):
+        self.cfg = config
+        self.video_buffer = [] # Список пакетов (отсортирован по PTS)
+        self.audio_buffer = []
         self.clock = 0
+        self.is_stalled = True
+        self.last_video_pts = -1
+        self.last_audio_pts = -1
 
-    def update(self, now, dt, stats):
-        # Считаем уровень буфера (самый старый PTS в очереди минус текущие часы)
-        v_level = (max(self.buf_v) - self.clock) if self.buf_v else 0
-        
-        if not self.playing:
-            if v_level >= self.threshold:
-                self.playing = True
-                stats.log_stall_end(now)
-        else:
-            if v_level <= 0:
-                self.playing = False
-                stats.log_stall_start(now)
+    def add_packet(self, packet):
+        target_buffer = self.video_buffer if packet.type == 'video' else self.audio_buffer
+        target_buffer.append(packet)
+        target_buffer.sort(key=lambda p: p.pts)
+
+    def get_buffer_level(self):
+        if not self.video_buffer: return 0
+        return self.video_buffer[-1].pts - self.clock
+
+    def update(self, dt):
+        if self.is_stalled:
+            if self.get_buffer_level() >= self.cfg['initial_buffer_duration']:
+                self.is_stalled = False
+                if self.video_buffer:
+                    self.clock = self.video_buffer[0].pts
+                return "playing" 
             else:
-                self.clock += dt
-                # Считаем рассинхрон, если есть данные обоих типов
-                if self.buf_v and self.buf_a:
-                    desync = abs(min(self.buf_v) - min(self.buf_a))
-                    stats.log_desync(desync)
-                
-                # Имитируем потребление кадров (удаляем старые PTS)
-                self.buf_v = [p for p in self.buf_v if p > self.clock]
-                self.buf_a = [p for p in self.buf_a if p > self.clock]
+                return "stalling"
+
+        self.clock += dt
+        
+        video_ready = [p for p in self.video_buffer if p.pts <= self.clock]
+        audio_ready = [p for p in self.audio_buffer if p.pts <= self.clock]
+
+        if not video_ready and not audio_ready:
+            self.is_stalled = True
+            return "stall_started"
+
+        current_v_pts = self.last_video_pts
+        if video_ready:
+            current_v_pts = video_ready[-1].pts
+            self.video_buffer = [p for p in self.video_buffer if p.pts > current_v_pts]
+            self.last_video_pts = current_v_pts
+
+        current_a_pts = self.last_audio_pts
+        if audio_ready:
+            current_a_pts = audio_ready[-1].pts
+            self.audio_buffer = [p for p in self.audio_buffer if p.pts > current_a_pts]
+            self.last_audio_pts = current_a_pts
+
+        sync_diff = abs(current_v_pts - current_a_pts)
+        if sync_diff > (self.cfg['av_sync_threshold'] / 1000.0):
+            return ("sync_error", sync_diff)
+            
+        return "playing"

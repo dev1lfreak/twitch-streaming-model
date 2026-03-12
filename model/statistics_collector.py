@@ -1,45 +1,76 @@
 class StatisticsCollector:
     def __init__(self):
-        self.stalls = []                # Список (start_time, duration)
-        self.current_stall_start = None
-        self.initial_buffer_time = 0
-        self.packet_loss_count = 0
-        self.desync_values = []         # Список значений |A_pts - V_pts|
-        self.total_packets = 0
-
-    def log_stall_start(self, time):
-        if self.current_stall_start is None:
-            self.current_stall_start = time
-
-    def log_stall_end(self, time):
-        if self.current_stall_start is not None:
-            duration = time - self.current_stall_start
-            if self.initial_buffer_time == 0:
-                self.initial_buffer_time = duration
-            else:
-                self.stalls.append((self.current_stall_start, duration))
-            self.current_stall_start = None
-
-    def log_loss(self):
-        self.packet_loss_count += 1
-
-    def log_desync(self, value):
-        self.desync_values.append(value)
-
-    def report(self):
-        print("\n" + "="*30)
-        print("ОТЧЕТ О КАЧЕСТВЕ (QoE)")
-        print("="*30)
-        print(f"Задержка при старте: {self.initial_buffer_time:.2f} сек")
-        print(f"Количество рывков: {len(self.stalls)}")
-        if self.stalls:
-            avg_stall = sum(d for t, d in self.stalls) / len(self.stalls)
-            print(f"Средняя длительность рывка: {avg_stall:.2f} сек")
+        self.timestamps = []
+        self.buffer_levels = []
+        self.stalls = []           # Список длительностей каждого рывка
+        self.sync_errors = []      # Список величин рассинхрона (в сек)
+        self.packet_loss = 0
+        self.packet_count = 0
         
-        loss_p = (self.packet_loss_count / self.total_packets * 100) if self.total_packets else 0
-        print(f"Потери пакетов: {self.packet_loss_count} ({loss_p:.2f}%)")
+        self.total_stall_time = 0
+        self.is_currently_stalling = True # Начинаем с буферизации
+        self.stall_start_time = 0
+
+    def collect(self, time, buffer_lvl, status):
+        self.timestamps.append(time)
+        self.buffer_levels.append(buffer_lvl)
         
-        if self.desync_values:
-            avg_desync = sum(self.desync_values) / len(self.desync_values)
-            print(f"Средняя рассинхронизация: {avg_desync*1000:.1f} мс")
-        print("="*30)
+        if status == "stalling" or status == "stall_started":
+            if not self.is_currently_stalling:
+                self.is_currently_stalling = True
+                self.stall_start_time = time
+        else:
+            if self.is_currently_stalling:
+                self.is_currently_stalling = False
+                duration = time - self.stall_start_time
+                if duration > 0:
+                    self.stalls.append(duration)
+                    self.total_stall_time += duration
+
+    def add_sync_error(self, time, diff):
+        self.sync_errors.append(diff)
+
+    def set_packet_loss(self, count):
+        self.packet_loss += count
+    
+    def set_packet_count(self, count):
+        self.packet_count = count
+
+    def print_report(self):
+        duration = self.timestamps[-1] if self.timestamps else 0
+        stall_count = len(self.stalls)
+        avg_stall_duration = (sum(self.stalls) / stall_count) if stall_count > 0 else 0
+        avg_buffer = sum(self.buffer_levels) / len(self.buffer_levels) if self.buffer_levels else 0
+        stall_ratio = (self.total_stall_time / duration * 100) if duration > 0 else 0
+        
+        max_sync = max(self.sync_errors) * 1000 if self.sync_errors else 0
+        avg_sync = (sum(self.sync_errors) / len(self.sync_errors) * 1000) if self.sync_errors else 0
+
+        print("\n" + "_"*40)
+        print(" Отчёт имитационной модели Twitch ")
+        print("_"*40)
+        
+        print(f"Общее время симуляции:    {duration:.2f} сек")
+        print(f"Макс. уровень буфера:    {max(self.buffer_levels):.2f} сек")
+        print(f"Средний уровень буфера:   {avg_buffer:.2f} сек")
+        
+        print("_" * 40)
+        print(f"Количество рывков (Stalls): {stall_count}")
+        print(f"Общее время ожидания:      {self.total_stall_time:.2f} сек")
+        print(f"Stall Ratio (простой):     {stall_ratio:.2f}%")
+        print(f"Средняя длительность рывка: {avg_stall_duration:.2f} сек")
+        
+        print("_" * 40)
+
+        print(f"Общее количество пакетов: {self.packet_count}")
+        print(f"Потеря пакетов: {self.packet_loss}")
+        print(f"Процент потерь: {self.packet_loss / self.packet_count * 100:.2f}%" if self.packet_count > 0 else "N/A")
+        print(f"Синхронизация (A/V Sync):")
+        if self.sync_errors:
+            print(f"  - Макс. рассинхрон:      {max_sync:.2f} мс")
+            print(f"  - Средний рассинхрон:    {avg_sync:.2f} мс")
+            print(f"  - Кол-во ошибок синхронизации: {len(self.sync_errors)}")
+        else:
+            print("  - Ошибок синхронизации не выявлено")
+            
+        print('\n')
