@@ -1,7 +1,14 @@
-from model.simulator import Simulation
-from data.analyze import SimulationAnalyzer
+from datetime import datetime
+import json
 
-config = {
+from model.simulator import Simulation
+from stats.analyze import SimulationAnalyzer
+from stats.data_exporter import DataExporter
+
+"""
+    Стандартные параметры симуляции
+"""
+test_config = {
     'video_bitrate': 4500, # kbps
     'fps': 60,
     'gop_size': 120,      # 2 секунды при 60 fps
@@ -15,13 +22,33 @@ config = {
     'random_seed': 42
 }
 
+def load_simulation_config(file_path):
+    """
+    Загружает параметры симуляции из JSON файла.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config
+    except FileNotFoundError:
+        print(f"Ошибка: Файл {file_path} не найден.")
+        return None
+    except json.JSONDecodeError:
+        print(f"Ошибка: Некорректный формат JSON в файле {file_path}.")
+        return None
+
 if __name__ == "__main__":
     analyzer = SimulationAnalyzer()
+    exporter = DataExporter()
+    date = datetime.now()
+
+    config = load_simulation_config('configs/standart_conf.json')
     for _ in range(500):
         print(f"Запуск симуляции {_+1}")
         sim = Simulation(config)
-        sim.run(5000)
+        sim.run(4000)
         analyzer.save_run(sim.stats)
-    analyzer.analyze()      
 
+    analyzer.detailed_analysis_to_file(date)
+    analyzer.analyze(date)
 
