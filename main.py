@@ -4,28 +4,9 @@ import json
 from model.simulator import Simulation
 from stats.analyze import SimulationAnalyzer
 from stats.data_exporter import DataExporter
-
-"""
-    Стандартные параметры симуляции
-"""
-test_config = {
-    'video_bitrate': 4500, # kbps
-    'fps': 60,
-    'gop_size': 120,      # 2 секунды при 60 fps
-    'audio_bitrate': 160,
-    'bandwidth': 5000,    # kbps
-    'network_delay': 0.05, # 50ms
-    'jitter_intensity': 0.01,
-    'packet_loss_probability': 0.005,
-    'initial_buffer_duration': 2.0,
-    'av_sync_threshold': 40, # ms
-    'random_seed': 42
-}
+from stats.sensitivity_analyzer import SensitivityAnalyzer
 
 def load_simulation_config(file_path):
-    """
-    Загружает параметры симуляции из JSON файла.
-    """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
@@ -38,17 +19,18 @@ def load_simulation_config(file_path):
         return None
 
 if __name__ == "__main__":
-    analyzer = SimulationAnalyzer()
-    exporter = DataExporter()
-    date = datetime.now()
+    base_config = load_simulation_config('configs/standart_conf.json')
+    s_analyzer = SensitivityAnalyzer(base_config)
 
-    config = load_simulation_config('configs/standart_conf.json')
-    for _ in range(500):
-        print(f"Запуск симуляции {_+1}")
-        sim = Simulation(config)
-        sim.run(4000)
-        analyzer.save_run(sim.stats)
+    loss_values = [0, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1]
+    s_analyzer.run_sensitivity_test('packet_loss_probability', loss_values, iterations_per_step=10)
+    
+    s_analyzer.plot_heatmap('packet_loss_probability')
+    s_analyzer.plot_dependency('packet_loss_probability')
 
-    analyzer.detailed_analysis_to_file(date)
-    analyzer.analyze(date)
+    buffer_values = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0]
+    s_analyzer.run_sensitivity_test('initial_buffer_duration', buffer_values, iterations_per_step=10)
+    
+    s_analyzer.plot_heatmap('initial_buffer_duration')
+    s_analyzer.plot_dependency('initial_buffer_duration')
 
