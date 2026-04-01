@@ -5,6 +5,8 @@ class Streamer:
     def __init__(self, config, generator):
         self.cfg = config
         self.generator = generator
+        self.fps = 60
+        self.audio_bitrate = 160
         self.frame_count = 0
         self.packet_count = 0
         
@@ -14,17 +16,17 @@ class Streamer:
         
         if is_key:
             # Распределение Парето для тяжелых I-кадров
-            size = (self.generator.paretovariate(2.5) + 1) * (self.cfg['video_bitrate'] / self.cfg['fps'] / 8) * 1024
+            size = (self.generator.paretovariate(2.5) + 1) * (self.cfg['video_bitrate'] / self.fps / 8) * 1024
         else:
             # Нормальное распределение для P-кадров
-            mean_size = self.cfg['video_bitrate'] / self.cfg['fps'] / 8 * 1024 / 6
+            mean_size = self.cfg['video_bitrate'] / self.fps / 8 * 1024 / 6
             size = max(512, self.generator.gauss(mean_size, mean_size * 0.2))
         frame = Frame('video', current_time, size, is_key)    
         return frame
     
     def generate_audio_frame(self, current_time):
         duration = 0.01 
-        mean_size = (self.cfg['audio_bitrate'] * 1000 * duration) / 8
+        mean_size = (self.audio_bitrate * 1000 * duration) / 8
         
         variation = 0.1
         min_size = mean_size * (1 - variation)

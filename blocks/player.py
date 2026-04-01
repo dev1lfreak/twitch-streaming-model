@@ -3,6 +3,8 @@ class Player:
         self.cfg = config
         self.video_buffer = [] # Список пакетов (отсортирован по PTS)
         self.audio_buffer = []
+        self.av_sync_threshold = 40
+        self.initial_buffer_duration = 2.0
         self.clock = 0
         self.is_stalled = True
         self.last_video_pts = -1
@@ -19,7 +21,7 @@ class Player:
 
     def update(self, dt):
         if self.is_stalled:
-            if self.get_buffer_level() >= self.cfg['initial_buffer_duration']:
+            if self.get_buffer_level() >= self.initial_buffer_duration:
                 self.is_stalled = False
                 if self.video_buffer:
                     self.clock = self.video_buffer[0].pts
@@ -49,7 +51,7 @@ class Player:
             self.last_audio_pts = current_a_pts
 
         sync_diff = abs(current_v_pts - current_a_pts)
-        if sync_diff > (self.cfg['av_sync_threshold'] / 1000.0):
+        if sync_diff > (self.av_sync_threshold / 1000.0):
             return ("sync_error", sync_diff)
             
-        return "playing"
+        return "playing" 
