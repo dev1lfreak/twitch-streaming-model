@@ -14,6 +14,7 @@ class Simulation:
         self.network = Network(config, self.generator)
         self.player = Player(config)
         self.stats = StatisticsCollector()
+        self.fps = 60
         self.curr_time = 0
         self.counter = 0
 
@@ -27,7 +28,7 @@ class Simulation:
         self.add_event(0, "player_tick")
 
         while self.events and self.curr_time < duration:
-            time, count, etype, data = heapq.heappop(self.events) 
+            time, _, etype, data = heapq.heappop(self.events) 
             self.curr_time = time
             
             if etype == "gen_video":
@@ -35,7 +36,7 @@ class Simulation:
                 pkts = self.streamer.fragment_into_packets(frame, time)
                 for p in pkts:
                     self.add_event(p.send_time, "network_ingress", p)
-                self.add_event(time + 1/self.config['fps'], "gen_video")
+                self.add_event(time + 1/self.fps, "gen_video")
 
             elif etype == "gen_audio":
                 frame = self.streamer.generate_audio_frame(time)

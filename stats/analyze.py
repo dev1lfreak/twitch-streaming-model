@@ -141,3 +141,17 @@ class SimulationAnalyzer:
         plt.savefig(full_path)
         plt.close()
         print(f"Гистограммы успешно сохранены в файл: {full_path}")
+
+    def get_average_metrics(self):
+        if not self.runs_data:
+            return 0.0, 0.0
+            
+        avg_stall = sum(run['total_stall_time'] for run in self.runs_data) / len(self.runs_data)
+        
+        total_sync_per_run = [sum(run['sync_errors']) for run in self.runs_data]
+        avg_sync = sum(total_sync_per_run) / len(self.runs_data)
+        
+        return avg_stall, avg_sync
+
+    def clear_data(self):
+        self.runs_data = []

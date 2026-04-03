@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 from datetime import datetime
 from model.simulator import Simulation
@@ -75,25 +76,64 @@ class SensitivityAnalyzer:
         plt.savefig(f'results/sensitivity/heatmap_{param_name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
         plt.close()
 
-    def plot_dependency(self, param_name):
-        data = self.results[param_name]
-        x = [item['value'] for item in data]
+    def plot_3d_qoe(self, history):
+        """3D график: X=loss, Y=gop, Z=jitter, Цвет=QoE"""
+        P = [item['config']['packet_loss_probability'] for item in history]
+        G = [item['config']['gop_size'] for item in history]
+        J = [item['config']['jitter_intensity'] for item in history]
+        Q = [item['qoe'] for item in history]
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
         
-        fig, ax1 = plt.subplots(figsize=(10, 6))
+        scatter = ax.scatter(P, G, J, c=Q, cmap='plasma', s=80, alpha=0.8, edgecolor='k')
+        cbar = plt.colorbar(scatter, ax=ax, pad=0.1)
+        cbar.set_label('QoE Score')
 
-        color = 'tab:blue'
-        ax1.set_xlabel(param_name)
-        ax1.set_ylabel('Время рывков (с)', color=color)
-        ax1.plot(x, [item['total_stall_time'] for item in data], color=color, marker='o', label='Stall Time')
-        ax1.tick_params(axis='y', labelcolor=color)
+        ax.set_xlabel('Packet Loss Prob')
+        ax.set_ylabel('GOP Size')
+        ax.set_zlabel('Jitter Intensity')
+        plt.title('3D Зависимость QoE от сетевых метрик и GOP')
 
-        ax2 = ax1.twinx()
-        color = 'tab:green'
-        ax2.set_ylabel('Среднее отклонение синхронизации (мс)', color=color)
-        ax2.plot(x, [item['avg_sync'] for item in data], color=color, marker='s', label='Sync Error')
-        ax2.tick_params(axis='y', labelcolor=color)
+        os.makedirs('results/optimization', exist_ok=True)
+        plt.savefig(f'results/optimization/3d_qoe_{datetime.now().strftime("%H%M%S")}.png')
+        plt.close()
 
-        plt.title(f"Зависимость QoS от {param_name}")
-        plt.grid(True, alpha=0.3)
-        plt.savefig(f'results/sensitivity/lines_{param_name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png')
+    def plot_2d_scatter_grid(self, history):
+        """Строит 2D графики зависимости QoE от всех 5 параметров (в виде облака точек)"""
+        params = ['video_bitrate', 'bandwidth', 'gop_size', 'jitter_intensity', 'packet_loss_probability']
+        fig, axes = plt.subplots(2, 3, figsize=(16, 10))
+        axes = axes.flatten()
+
+        Q = [item['qoe'] for item in history]
+
+        for i, param in enumerate(params):
+            X = [item['config'][param] for item in history]
+            axes[i].scatter(X, Q, alpha=0.6, c='blue', edgecolor='k')
+            axes[i].set_xlabel(param)
+            axes[i].set_ylabel('QoE Score')
+            axes[i].grid(True, linestyle='--', alpha=0.5)
+
+        axes[-1].axis('off')
+        plt.tight_layout()
+        plt.savefig(f'results/optimization/2d_scatter_grid_{datetime.now().strftime("%H%M%S")}.png')
+        plt.close()
+
+    def plot_isolated_dependencies(self, isolated_results, param_name):
+        """Графики для сценария поочередного изменения (линейные)"""
+        fig, axes = plt.subplots(figsize=(8, 6))
+
+        for i, (param, data) in enumerate(isolated_results.items()):
+            if not data or (param != param_name): continue
+            X = [pt[0] for pt in data]
+            Y = [pt[1] for pt in data]
+            
+            axes.plot(X, Y, marker='o', linestyle='-', color='green', linewidth=2)
+            axes.set_xlabel(param)
+            axes.set_ylabel('QoE Score')
+            axes.set_title(f'Влияние {param} на QoE\n(остальные константа)')
+            axes.grid(True)
+
+        plt.tight_layout()
+        plt.savefig(f'results/optimization/isolated/isolated_{param}_{datetime.now().strftime("%H%M%S")}.png')
         plt.close()

@@ -1,7 +1,0 @@
-{
-	"video_bitrate": 4500,
-	"gop_size": 120,
-	"bandwidth": 5000,
-	"jitter_intensity": 0.01,
-	"packet_loss_probability": 0.005
-}
